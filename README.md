@@ -53,9 +53,7 @@ nohup deno run --allow-net --allow-read=.env main.ts >> /tmp/emby302gateway.log 
 
 ## 详细教程：
 
-[OpenList + STRM + rclone + Emby + 302 重定向网关（Deno）的家庭影院部署方案
-
-](https://anjing.art/posts/2026-01-16-OpenList%20+%20STRM%20+%20rclone%20+%20Emby%20+%20302%20重定向网关（Deno）的家庭影院部署方案)
+[OpenList + STRM + rclone + Emby + 302 重定向网关（Deno）的家庭影院部署方案](https://anjing.art/posts/2026-01-16-OpenList%20+%20STRM%20+%20rclone%20+%20Emby%20+%20302%20重定向网关（Deno）的家庭影院部署方案)
 
 ## License
 
