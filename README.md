@@ -45,7 +45,7 @@ deno run --allow-net --allow-read=.env main.ts
 nohup deno run --allow-net --allow-read=.env main.ts >> /tmp/emby302gateway.log 2>&1 &
 ```
 
-## Emby 客户端：
+## 客户端：
 
 将 Emby 客户端的服务器地址配置为 Deno 网关地址：`http://你的服务器IP:18096`；
 
