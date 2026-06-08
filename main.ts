@@ -143,14 +143,28 @@ function sourceLabel(mediaSourceId: string | null): string {
   return mediaSourceId ?? "default";
 }
 
+function proxiedHeaders(upstreamHeaders: Headers): Headers {
+  const headers = new Headers(upstreamHeaders);
+  headers.delete("Content-Encoding");
+  headers.delete("Content-Length");
+  headers.delete("Transfer-Encoding");
+  return headers;
+}
+
 async function proxy(req: Request, url: URL): Promise<Response> {
+  const headers = new Headers(req.headers);
+  headers.set("Accept-Encoding", "identity");
   const res = await fetch(EMBY_HOST + url.pathname + url.search, {
     method: req.method,
-    headers: req.headers,
+    headers,
     body: req.method !== "GET" && req.method !== "HEAD" ? req.body : undefined,
     redirect: "manual",
   });
-  return res;
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers: proxiedHeaders(res.headers),
+  });
 }
 
 // ==================== API ====================
