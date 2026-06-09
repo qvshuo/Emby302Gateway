@@ -30,7 +30,7 @@ alist://xxx
 git clone https://github.com/qvshuo/Emby302Gateway.git --depth=1 && cd Emby302Gateway
 ```
 
-从 Deno 的 [Releases 页面](https://github.com/denoland/deno/releases) 直接下载单一可执行文件，或者：
+从 Deno 的 [Releases 页面](https://github.com/denoland/deno/releases) 直接下载单一可执行文件，或者执行以下命令以安装 Deno：
 
 ```
 curl -fsSL https://deno.land/install.sh | sh
