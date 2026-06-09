@@ -2,6 +2,26 @@
 
 通过 Deno 运行，将 Emby STRM 播放请求重定向到 OpenList 返回的 CDN 直链地址。
 
+## 前提：
+
+STRM 指向 OpenList 的 `/d/...` 文件地址。
+
+可用示例：
+
+```
+https://openlist.example.com/d/Movies/example.mp4
+```
+
+无效示例：
+
+```
+https://openlist.example.com/p/Movies/example.mp4
+https://openlist.example.com/s/example.mp4
+https://cdn.example.com/file/example.mp4
+115://xxx
+alist://xxx
+```
+
 ## 安装：
 
 克隆 [Emby302Gateway](https://github.com/qvshuo/Emby302Gateway) 到本地：
