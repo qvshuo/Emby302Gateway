@@ -10,6 +10,7 @@ STRM 指向 OpenList 的 `/d/...` 文件地址。
 
 ```
 https://openlist.example.com/d/Movies/example.mp4
+http://localhost:5244/d/example.mp4
 ```
 
 无效示例：
