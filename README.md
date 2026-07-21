@@ -5,14 +5,12 @@
 ## 原理
 
 ```mermaid
-flowchart TD
-    Client["Emby 客户端"] -->|发起播放请求| Gateway{"是否为 OpenList<br/>STRM 资源"}
-
-    Gateway -->|是| Redirect["请求 OpenList，返回 302 直链"]
-    Redirect --> ClientDirect["客户端直连 CDN 播放"]
-
-    Gateway -->|否| Proxy["转发请求至 Emby，透传响应"]
-    Proxy --> ClientProxy["客户端正常播放"]
+flowchart LR
+    C["Emby 客户端"] -->|播放请求| G{"OpenList<br/>STRM?"}
+    G -->|是| R["请求 OpenList<br/>返回 302"]
+    R --> D["客户端直连 CDN"]
+    G -->|否| P["转发 Emby<br/>透传响应"]
+    P --> N["客户端正常播放"]
 ```
 
 ## 前提：
