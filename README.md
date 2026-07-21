@@ -2,6 +2,21 @@
 
 通过 Deno 运行，将 Emby STRM 播放请求重定向到 OpenList 返回的 CDN 直链地址。
 
+## 原理
+
+```mermaid
+flowchart TD
+    Client["Emby 客户端"] -->|1. 发起播放请求| Gateway{"是否为 OpenList<br/>STRM 直链?"}
+    
+    Gateway -->|是| ApiOpenList["请求 OpenList API"]
+    ApiOpenList -->|2. 获取真实文件直链| Http302["返回 302 重定向"]
+    Http302 -->|3. 响应给客户端| PlayCDN["客户端直接从外部 CDN 播放<br/>(不走本地服务器带宽)"]
+    
+    Gateway -->|否| ApiEmby["请求本地 Emby 服务端"]
+    ApiEmby -->|2. 获取原始媒体数据| ProxyData["网关直接透传数据"]
+    ProxyData -->|3. 响应给客户端| PlayLocal["客户端通过网关透传播放<br/>(走本地服务器带宽)"]
+```
+
 ## 前提：
 
 STRM 指向 OpenList 的 `/d/...` 文件地址。
