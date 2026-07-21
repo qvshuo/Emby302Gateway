@@ -6,15 +6,13 @@
 
 ```mermaid
 flowchart TD
-    Client["Emby 客户端"] -->|1. 发起播放请求| Gateway{"是否为 OpenList<br/>STRM 直链?"}
-    
-    Gateway -->|是| ApiOpenList["请求 OpenList API"]
-    ApiOpenList -->|2. 获取真实文件直链| Http302["返回 302 重定向"]
-    Http302 -->|3. 响应给客户端| PlayCDN["客户端直接从外部 CDN 播放<br/>(不走本地服务器带宽)"]
-    
-    Gateway -->|否| ApiEmby["请求本地 Emby 服务端"]
-    ApiEmby -->|2. 获取原始媒体数据| ProxyData["网关直接透传数据"]
-    ProxyData -->|3. 响应给客户端| PlayLocal["客户端通过网关透传播放<br/>(走本地服务器带宽)"]
+    Client["Emby 客户端"] -->|发起播放请求| Gateway{"是否为 OpenList<br/>STRM 资源"}
+
+    Gateway -->|是| Redirect["请求 OpenList，返回 302 直链"]
+    Redirect --> ClientDirect["客户端直连 CDN 播放"]
+
+    Gateway -->|否| Proxy["转发请求至 Emby，透传响应"]
+    Proxy --> ClientProxy["客户端正常播放"]
 ```
 
 ## 前提：
