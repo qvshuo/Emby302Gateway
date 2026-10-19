@@ -102,7 +102,7 @@ go build .
 
 ## 行为：
 
-- 仅处理配置的 OpenList 远程非直播源：PlaybackInfo 强制直放并生成相对播放 URL，保留客户端凭据与 `PlaySessionId`；Header 认证会将调用方 Token 放入播放 URL，供无法附加请求头的播放器使用。
+- 仅处理配置的 OpenList 远程非直播源：PlaybackInfo 强制直放并生成相对播放 URL，保留客户端凭据与 `PlaySessionId`，播放 URL 不重复携带客户端 API 基路径；Header 认证会将调用方 Token 放入播放 URL，供无法附加请求头的播放器使用。
 - 仅对视频 GET 的 `stream[.扩展名]?Static=true`、`original[.扩展名]` 返回 302。HEAD、转码、其他站点、本地/rclone、直播、音频、下载及其他 API 均透传；支持 `/emby` 前缀和 `EMBY_HOST` 中的上游路径前缀。
 - 使用 Go 标准库反向代理，保留上游状态、请求体、响应头及重定向，支持 Range、流式响应和 WebSocket。System/Info 保持原样。
 - Emby 网页播放器仅为网关处理的 OpenList 源移除 CORS 限制；其他媒体保留原逻辑。

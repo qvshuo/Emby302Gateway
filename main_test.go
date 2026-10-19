@@ -163,8 +163,12 @@ func TestGateway(t *testing.T) {
 			var stream string
 			json.Unmarshal(ss[0]["DirectStreamUrl"], &stream)
 			u, _ := url.Parse(stream)
-			if u.Path != prefix+"/videos/42/stream" || u.Query().Get("PlaySessionId") != "session" || u.Query().Get("api_key") != "client" || u.Query().Get("Static") != "true" {
+			if u.Path != "/videos/42/stream" || u.Query().Get("PlaySessionId") != "session" || u.Query().Get("api_key") != "client" || u.Query().Get("Static") != "true" {
 				t.Fatal(stream)
+			}
+			// Emby Web's getUrl adds /emby to its server address before the source URL.
+			if response := call("GET", "/emby"+stream, "webclient", "", nil); response.Code != http.StatusFound {
+				t.Fatalf("client-resolved stream must redirect: status=%d", response.Code)
 			}
 			for _, s := range ss[1:] {
 				if string(s["SupportsTranscoding"]) != "true" || s["DirectStreamUrl"] != nil {
@@ -483,7 +487,7 @@ func TestEmbyBasePath(t *testing.T) {
 			}
 			s := body.MediaSources[0]
 			u, _ := url.Parse(s.DirectStreamUrl)
-			if !s.XOpenListDirectStream || u.Path != prefix+"/videos/42/stream" || u.Query().Get("api_key") != "caller-token" {
+			if !s.XOpenListDirectStream || u.Path != "/videos/42/stream" || u.Query().Get("api_key") != "caller-token" {
 				t.Fatal("upstream prefix leaked into client route or rewrite missed")
 			}
 		})

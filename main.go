@@ -245,11 +245,8 @@ func (g *gateway) playbackInfo(r *http.Request, data []byte, item string) []byte
 		if session != "" {
 			q.Set("PlaySessionId", session)
 		}
-		prefix := ""
-		if strings.HasPrefix(strings.ToLower(r.URL.Path), "/emby/") {
-			prefix = "/emby"
-		}
-		stream := prefix + "/videos/" + url.PathEscape(item) + "/stream?" + q.Encode()
+		// Emby clients add their API base path when resolving DirectStreamUrl.
+		stream := "/videos/" + url.PathEscape(item) + "/stream?" + q.Encode()
 		source["DirectStreamUrl"], _ = json.Marshal(stream)
 		source["SupportsDirectPlay"] = json.RawMessage("true")
 		source["SupportsDirectStream"] = json.RawMessage("true")
