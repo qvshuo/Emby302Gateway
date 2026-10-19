@@ -62,7 +62,7 @@ func TestGateway(t *testing.T) {
 			io.WriteString(w, `[{"DeviceId":"device","UserId":"user"}]`)
 		case "/Items":
 			queries.Add(1)
-			if r.URL.Query().Get("api_key") != "client" && r.Header.Get("X-Emby-Token") != "client" && r.Header.Get("X-Emby-Token") != "member" && r.Header.Get("X-Emby-Token") != "blocked" && !strings.Contains(r.Header.Get("Authorization"), `Token="client"`) {
+			if r.URL.Query().Get("api_key") != "client" && r.URL.Query().Get("api_key") != "member" && r.Header.Get("X-Emby-Token") != "client" && r.Header.Get("X-Emby-Token") != "member" && r.Header.Get("X-Emby-Token") != "blocked" && !strings.Contains(r.Header.Get("Authorization"), `Token="client"`) {
 				w.WriteHeader(401)
 				return
 			}
@@ -75,8 +75,11 @@ func TestGateway(t *testing.T) {
 				io.WriteString(w, "invalid")
 				return
 			}
+			mediaType := "Video"
 			isRemote, infinite, path := true, false, openlistURL+"/d/115/a%20b.mkv"
 			switch item {
+			case "audio":
+				mediaType = "Audio"
 			case "local":
 				isRemote = false
 				path = "/mnt/a.mkv"
@@ -87,7 +90,7 @@ func TestGateway(t *testing.T) {
 			case "relative":
 				path = "/d/115/a.mkv"
 			}
-			json.NewEncoder(w).Encode(map[string]any{"Items": []any{map[string]any{"Path": "/library/" + item + ".strm", "MediaSources": []any{map[string]any{"Id": "remote", "Path": path, "IsRemote": isRemote, "IsInfiniteStream": infinite}}}}})
+			json.NewEncoder(w).Encode(map[string]any{"Items": []any{map[string]any{"Path": "/library/" + item + ".strm", "MediaType": mediaType, "MediaSources": []any{map[string]any{"Id": "remote", "Path": path, "IsRemote": isRemote, "IsInfiniteStream": infinite}}}}})
 		case "/Items/42/PlaybackInfo", "/emby/Items/42/PlaybackInfo":
 			body, _ := io.ReadAll(r.Body)
 			receivedBody = string(body)
@@ -239,7 +242,7 @@ func TestGateway(t *testing.T) {
 	})
 	t.Run("passthrough and failure fallback", func(t *testing.T) {
 		before := resolves.Load()
-		for _, item := range []string{"local", "other", "live", "relative", "query-error", "malformed"} {
+		for _, item := range []string{"local", "audio", "other", "live", "relative", "query-error", "malformed"} {
 			w := call("GET", "/videos/"+item+"/original?api_key=client", "ua", "", nil)
 			if w.Code != 206 || w.Body.String() != "upstream" {
 				t.Fatal(item, w.Code)
@@ -306,11 +309,49 @@ func TestGateway(t *testing.T) {
 			t.Fatal("device identity", w.Code)
 		}
 	})
+	t.Run("header identity survives player requests", func(t *testing.T) {
+		for _, headers := range []http.Header{
+			{"X-Emby-Token": {"member"}, "Authorization": {`Emby UserId="user"`}},
+			{"X-Emby-Token": {"member"}, "Authorization": {`Emby DeviceId="device"`}},
+			{"X-Emby-Token": {"member"}, "X-Emby-Device-Id": {"device"}},
+		} {
+			w := call("POST", "/emby/Items/42/PlaybackInfo", "identity", `{}`, headers)
+			var response struct {
+				MediaSources []struct {
+					DirectStreamURL string `json:"DirectStreamUrl"`
+				}
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if w := call("GET", "/emby"+response.MediaSources[0].DirectStreamURL, "identity", "", nil); w.Code != 302 {
+				t.Fatalf("header-free player request lost identity: status=%d", w.Code)
+			}
+		}
+	})
 	t.Run("playback policy", func(t *testing.T) {
 		before := resolves.Load()
 		w := call("GET", "/videos/42/stream?Static=true&UserId=user", "one", "", http.Header{"X-Emby-Token": {"blocked"}})
 		if w.Code == 302 || resolves.Load() != before {
 			t.Fatal("disabled playback bypassed")
+		}
+	})
+	t.Run("client parameter variants", func(t *testing.T) {
+		for _, tc := range []struct {
+			path    string
+			headers http.Header
+			status  int
+		}{
+			{"/videos/42/stream?static=true&api_key=client", nil, 302},
+			{"/videos/42/stream?Static=true&mediaSourceId=missing&api_key=client", nil, 206},
+			{"/videos/42/stream?Static=true&userid=user", http.Header{"X-Emby-Token": {"member"}}, 302},
+			{"/videos/42/stream?Static=true&deviceId=device", http.Header{"X-Emby-Token": {"member"}}, 302},
+			{"/videos/42/stream?Static=true&X-Emby-Device-Id=device", http.Header{"X-Emby-Token": {"member"}}, 302},
+			{"/videos/42/stream?Static=true", http.Header{"X-Emby-Token": {"member"}, "X-Emby-Device-Id": {"device"}}, 302},
+		} {
+			if w := call("GET", tc.path, "variants", "", tc.headers); w.Code != tc.status {
+				t.Errorf("%s: status=%d, want=%d", tc.path, w.Code, tc.status)
+			}
 		}
 	})
 	t.Run("concurrent", func(t *testing.T) {
@@ -631,4 +672,45 @@ func TestLookupDiagnostics(t *testing.T) {
 		}
 	})
 
+}
+
+func TestPlaybackParameterOverrides(t *testing.T) {
+	g := newGateway(config{emby: "http://emby", openlist: "http://openlist"})
+	r := httptest.NewRequest("POST", "/emby/Items/42/PlaybackInfo?mediasourceid=old&static=false&playsessionid=old&userid=user", nil)
+	body := []byte(`{"PlaySessionId":"current","MediaSources":[{"Id":"source","IsRemote":true,"Path":"http://openlist/d/movie.mp4"}]}`)
+	var response struct {
+		MediaSources []struct {
+			DirectStreamURL string `json:"DirectStreamUrl"`
+		}
+	}
+	if err := json.Unmarshal(g.playbackInfo(r, body, "42"), &response); err != nil {
+		t.Fatal(err)
+	}
+	u, err := url.Parse(response.MediaSources[0].DirectStreamURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]string{"MediaSourceId": "source", "Static": "true", "PlaySessionId": "current"} {
+		count := 0
+		for name, values := range u.Query() {
+			if strings.EqualFold(name, key) {
+				count++
+				if len(values) != 1 || values[0] != want {
+					t.Errorf("%s: %v, want=%s", name, values, want)
+				}
+			}
+		}
+		if count != 1 {
+			t.Errorf("%s occurs %d times", key, count)
+		}
+	}
+}
+
+func TestAudioPlaybackUnchanged(t *testing.T) {
+	g := newGateway(config{emby: "http://emby", openlist: "http://openlist"})
+	r := httptest.NewRequest("POST", "/Items/audio/PlaybackInfo", nil)
+	body := []byte(`{ "MediaSources": [{"Id":"audio","IsRemote":true,"Path":"http://openlist/d/song.mp3","MediaStreams":[{"Type":"Audio"}],"SupportsTranscoding":true}] }`)
+	if got := g.playbackInfo(r, body, "audio"); !bytes.Equal(got, body) {
+		t.Fatal("audio PlaybackInfo was rewritten")
+	}
 }

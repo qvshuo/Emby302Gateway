@@ -127,12 +127,41 @@ func newGateway(c config) *gateway {
 	return g
 }
 
+func queryValue(q url.Values, key string) string {
+	if value := q.Get(key); value != "" {
+		return value
+	}
+	for name, values := range q {
+		if strings.EqualFold(name, key) && len(values) > 0 {
+			return values[0]
+		}
+	}
+	return ""
+}
+
+func setQuery(q url.Values, key, value string) {
+	for name := range q {
+		if strings.EqualFold(name, key) {
+			delete(q, name)
+		}
+	}
+	q.Set(key, value)
+}
+
 func requestValue(r *http.Request, key string) string {
-	if value := r.URL.Query().Get(key); value != "" {
+	q := r.URL.Query()
+	if value := queryValue(q, key); value != "" {
 		return value
 	}
 	if key == "Token" {
-		for _, value := range []string{r.Header.Get("X-Emby-Token"), r.URL.Query().Get("api_key"), r.URL.Query().Get("X-Emby-Token")} {
+		for _, value := range []string{r.Header.Get("X-Emby-Token"), queryValue(q, "api_key"), queryValue(q, "X-Emby-Token")} {
+			if value != "" {
+				return value
+			}
+		}
+	}
+	if key == "DeviceId" {
+		for _, value := range []string{queryValue(q, "X-Emby-Device-Id"), r.Header.Get("X-Emby-Device-Id")} {
 			if value != "" {
 				return value
 			}
@@ -216,18 +245,28 @@ func (g *gateway) playbackInfo(r *http.Request, data []byte, item string) []byte
 			Path                       string
 			DirectStreamURL            string `json:"DirectStreamUrl"`
 			IsRemote, IsInfiniteStream bool
+			MediaStreams               []struct{ Type string }
 		}
 		if json.Unmarshal(raw, &media) != nil || media.ID == "" || !media.IsRemote || media.IsInfiniteStream || g.openlistPath(media.Path) == "" || json.Unmarshal(raw, &source) != nil {
 			continue
 		}
+		if len(media.MediaStreams) > 0 {
+			video := false
+			for _, stream := range media.MediaStreams {
+				video = video || strings.EqualFold(stream.Type, "Video")
+			}
+			if !video {
+				continue
+			}
+		}
 		q := r.URL.Query()
-		if q.Get("api_key") == "" && q.Get("X-Emby-Token") == "" {
+		if queryValue(q, "api_key") == "" && queryValue(q, "X-Emby-Token") == "" {
 			token := requestValue(r, "Token")
 			if token == "" {
 				if upstream, err := url.Parse(media.DirectStreamURL); err == nil {
-					token = upstream.Query().Get("api_key")
+					token = queryValue(upstream.Query(), "api_key")
 					if token == "" {
-						token = upstream.Query().Get("X-Emby-Token")
+						token = queryValue(upstream.Query(), "X-Emby-Token")
 					}
 				}
 			}
@@ -235,15 +274,22 @@ func (g *gateway) playbackInfo(r *http.Request, data []byte, item string) []byte
 				q.Set("api_key", token)
 			}
 		}
-		q.Set("MediaSourceId", media.ID)
-		q.Set("Static", "true")
-		if user, _ := r.Context().Value(playbackUser{}).(string); user != "" && !q.Has("UserId") {
-			q.Set("UserId", user)
+		setQuery(q, "MediaSourceId", media.ID)
+		setQuery(q, "Static", "true")
+		user, _ := r.Context().Value(playbackUser{}).(string)
+		if user == "" {
+			user = requestValue(r, "UserId")
+		}
+		if user != "" && queryValue(q, "UserId") == "" {
+			setQuery(q, "UserId", user)
+		}
+		if device := requestValue(r, "DeviceId"); device != "" && queryValue(q, "DeviceId") == "" && queryValue(q, "X-Emby-Device-Id") == "" {
+			setQuery(q, "DeviceId", device)
 		}
 		var session string
 		json.Unmarshal(body["PlaySessionId"], &session)
 		if session != "" {
-			q.Set("PlaySessionId", session)
+			setQuery(q, "PlaySessionId", session)
 		}
 		// Emby clients add their API base path when resolving DirectStreamUrl.
 		stream := "/videos/" + url.PathEscape(item) + "/stream?" + q.Encode()
@@ -275,8 +321,8 @@ func (g *gateway) embyJSON(r *http.Request, path string, q url.Values, body any)
 	u.Path = strings.TrimRight(u.Path, "/") + path
 	u.RawPath = ""
 	for _, key := range []string{"api_key", "X-Emby-Token"} {
-		if values, ok := r.URL.Query()[key]; ok {
-			q[key] = values
+		if value := queryValue(r.URL.Query(), key); value != "" {
+			q.Set(key, value)
 		}
 	}
 	u.RawQuery = q.Encode()
@@ -343,6 +389,7 @@ func (g *gateway) mediaPath(r *http.Request, item string) string {
 	var body struct {
 		Items []struct {
 			Path         string
+			MediaType    string
 			MediaSources []struct {
 				ID                         string `json:"Id"`
 				Path                       string
@@ -354,10 +401,10 @@ func (g *gateway) mediaPath(r *http.Request, item string) string {
 		return ""
 	}
 	mediaItem := body.Items[0]
-	if !strings.HasSuffix(strings.ToLower(mediaItem.Path), ".strm") {
+	if !strings.HasSuffix(strings.ToLower(mediaItem.Path), ".strm") || strings.EqualFold(mediaItem.MediaType, "Audio") {
 		return ""
 	}
-	sourceID := r.URL.Query().Get("MediaSourceId")
+	sourceID := queryValue(r.URL.Query(), "MediaSourceId")
 	for _, source := range mediaItem.MediaSources {
 		if sourceID != "" && source.ID != sourceID {
 			continue
@@ -446,7 +493,7 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	match := videoRoute.FindStringSubmatch(r.URL.Path)
-	direct := strings.EqualFold(r.URL.Query().Get("Static"), "true") || strings.HasPrefix(strings.ToLower(r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]), "original")
+	direct := strings.EqualFold(queryValue(r.URL.Query(), "Static"), "true") || strings.HasPrefix(strings.ToLower(r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]), "original")
 	if r.Method == "GET" && len(match) > 0 && direct && r.Header.Get("Upgrade") == "" {
 		// Authorize and classify through Emby before looking up a cached CDN URL.
 		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
