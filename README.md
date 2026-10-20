@@ -1,6 +1,6 @@
 # Emby302Gateway
 
-通过 Go 标准库运行，将 Emby STRM 播放请求重定向到 OpenList 返回的 CDN 直链地址。
+将 Emby STRM 播放请求重定向到 OpenList 返回的 CDN 直链地址。
 
 ## 原理
 
@@ -42,8 +42,6 @@ alist://xxx
 git clone https://github.com/qvshuo/Emby302Gateway.git --depth=1 && cd Emby302Gateway
 ```
 
-安装 Go 1.23 或更新版本，无第三方依赖。
-
 ## 配置：
 
 ```
@@ -65,18 +63,7 @@ OpenList 令牌位于「管理 → 设置 → 其他 → 令牌」。默认端�
 
 ## 启动：
 
-```
-go run .
-```
-
-后台运行：
-
-```
-go build -trimpath -ldflags="-s -w" -o gateway .
-nohup ./gateway >> /tmp/emby302gateway.log 2>&1 &
-```
-
-或使用 Docker Compose（Linux host 网络）：
+使用 Docker Compose：
 
 ```bash
 docker compose up -d --build
