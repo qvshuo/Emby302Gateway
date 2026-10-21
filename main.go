@@ -43,7 +43,7 @@ type gateway struct {
 type playbackUser struct{}
 type originalRequest struct{}
 
-var authParameter = regexp.MustCompile(`(?i)(UserId|DeviceId|Token)="([^"]*)"`)
+var authParameter = regexp.MustCompile(`(?i)(?:^|[\s,])(UserId|DeviceId|Token)=("[^"]*"|[^,\s]+)`)
 
 var playbackRoute = regexp.MustCompile(`(?i)^(?:/emby)?/items/([^/]+)/playbackinfo$`)
 var videoRoute = regexp.MustCompile(`(?i)^(?:/emby)?/videos/([^/]+)/(?:stream(?:\.[^/]+)?|original(?:\.[^/]+)?)$`)
@@ -170,7 +170,7 @@ func requestValue(r *http.Request, key string) string {
 	for _, header := range []string{"Authorization", "X-Emby-Authorization"} {
 		for _, pair := range authParameter.FindAllStringSubmatch(r.Header.Get(header), -1) {
 			if strings.EqualFold(pair[1], key) {
-				return pair[2]
+				return strings.Trim(pair[2], `"`)
 			}
 		}
 	}

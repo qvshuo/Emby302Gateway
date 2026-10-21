@@ -314,6 +314,7 @@ func TestGateway(t *testing.T) {
 			{"X-Emby-Token": {"member"}, "Authorization": {`Emby UserId="user"`}},
 			{"X-Emby-Token": {"member"}, "Authorization": {`Emby DeviceId="device"`}},
 			{"X-Emby-Token": {"member"}, "X-Emby-Device-Id": {"device"}},
+			{"X-Emby-Token": {"member"}, "Authorization": {`Emby UserId=user, DeviceId=device`}},
 		} {
 			w := call("POST", "/emby/Items/42/PlaybackInfo", "identity", `{}`, headers)
 			var response struct {
@@ -472,6 +473,8 @@ func TestPlaybackCredentials(t *testing.T) {
 		{"header", "", "X-Emby-Token", "header-token", "upstream-token", "header-token"},
 		{"authorization", "", "Authorization", `Emby Token="authorization-token"`, "upstream-token", "authorization-token"},
 		{"emby authorization", "", "X-Emby-Authorization", `Emby Token="emby-token"`, "upstream-token", "emby-token"},
+		{"unquoted authorization", "", "Authorization", `Emby Token=authorization-token`, "upstream-token", "authorization-token"},
+		{"unquoted emby authorization", "", "X-Emby-Authorization", `Emby Token=emby-token`, "upstream-token", "emby-token"},
 		{"upstream", "", "", "", "upstream-token", "upstream-token"},
 		{"no credentials", "", "", "", "", ""},
 	} {
@@ -712,5 +715,23 @@ func TestAudioPlaybackUnchanged(t *testing.T) {
 	body := []byte(`{ "MediaSources": [{"Id":"audio","IsRemote":true,"Path":"http://openlist/d/song.mp3","MediaStreams":[{"Type":"Audio"}],"SupportsTranscoding":true}] }`)
 	if got := g.playbackInfo(r, body, "audio"); !bytes.Equal(got, body) {
 		t.Fatal("audio PlaybackInfo was rewritten")
+	}
+}
+
+func TestAuthorizationParameters(t *testing.T) {
+	for _, header := range []string{"Authorization", "X-Emby-Authorization"} {
+		for _, value := range []string{
+			`Emby UserId="user", DeviceId="device", Token="caller"`,
+			`Emby UserId=user,DeviceId=device,Token=caller`,
+			`Emby UserId=user, DeviceId="device", Token=caller`,
+		} {
+			r := httptest.NewRequest("GET", "/", nil)
+			r.Header.Set(header, value)
+			for key, want := range map[string]string{"UserId": "user", "DeviceId": "device", "Token": "caller"} {
+				if got := requestValue(r, key); got != want {
+					t.Errorf("%s %s: got=%q want=%q", header, key, got, want)
+				}
+			}
+		}
 	}
 }
