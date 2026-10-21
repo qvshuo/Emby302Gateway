@@ -1,6 +1,7 @@
 .env
 .DS_Store
 AGENTS.md
+COMPARISON.md
 
 gateway
 *_test.go
