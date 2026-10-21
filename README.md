@@ -15,7 +15,7 @@ flowchart LR
 
 ## 前提：
 
-STRM 使用完整的 HTTP(S) `/d/...` 地址，与 `OPENLIST_ADDR` 的协议、主机和端口一致，并可被 Emby 及网关访问。
+STRM 指向 OpenList 的 `/d/...` 文件地址。
 
 可用示例：
 
@@ -36,7 +36,7 @@ alist://xxx
 
 ## 安装：
 
-克隆 [Emby302Gateway](https://github.com/qvshuo/Emby302Gateway) 到本地：
+克隆此仓库到本地：
 
 ```
 git clone https://github.com/qvshuo/Emby302Gateway.git --depth=1 && cd Emby302Gateway
@@ -55,11 +55,9 @@ EMBY_HOST=http://localhost:8096
 EMBY_API_KEY=your_emby_api_key
 OPENLIST_ADDR=http://localhost:5244
 OPENLIST_TOKEN=your_openlist_token
-PORT=18096
-CACHE_TTL=180
 ```
 
-OpenList 令牌位于「管理 → 设置 → 其他 → 令牌」。默认端口 18096，缓存 180 秒；不要提交 `.env`。
+OpenList 令牌位于「管理 → 设置 → 其他 → 令牌」。
 
 ## 启动：
 
@@ -67,14 +65,13 @@ OpenList 令牌位于「管理 → 设置 → 其他 → 令牌」。默认端�
 
 ```bash
 docker compose up -d --build
-docker compose logs -f gateway
 ```
 
 ## 连接：
 
-将 Emby 客户端的服务器地址配置为网关地址：`http://你的服务器IP:18096`；
+将 Emby 客户端的服务器地址配置为此网关地址：`http://你的服务器IP:18096`；
 
-仅将 OpenList STRM 视频播放重定向到 CDN，其他请求及解析失败均回源 Emby。客户端须支持原始媒体格式并可访问 CDN。
+播放 STRM 视频时，实际请求将通过 302 重定向解析为 OpenList 返回的 CDN 直链，从而不再受 Emby 所在设备的网络带宽限制；本地视频及其他无法解析为 OpenList 直链的资源，由本网关透传给 Emby 处理。
 
 ## 教程：
 
