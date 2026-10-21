@@ -26,11 +26,14 @@ type config struct {
 	port                       int
 	ttl                        time.Duration
 }
+
 type cacheKey struct{ path, ua string }
+
 type entry struct {
 	url     string
 	expires time.Time
 }
+
 type gateway struct {
 	cfg            config
 	emby, openlist *url.URL
@@ -43,11 +46,12 @@ type gateway struct {
 type playbackUser struct{}
 type originalRequest struct{}
 
-var authParameter = regexp.MustCompile(`(?i)(?:^|[\s,])(UserId|DeviceId|Token)=("[^"]*"|[^,\s]+)`)
-
-var playbackRoute = regexp.MustCompile(`(?i)^(?:/emby)?/items/([^/]+)/playbackinfo$`)
-var videoRoute = regexp.MustCompile(`(?i)^(?:/emby)?/videos/([^/]+)/(?:stream(?:\.[^/]+)?|original(?:\.[^/]+)?)$`)
-var playerExpression = regexp.MustCompile(`mediaSource\.IsRemote\s*&&\s*"DirectPlay"\s*===\s*playMethod\s*\?\s*null\s*:\s*"anonymous"`)
+var (
+	authParameter    = regexp.MustCompile(`(?i)(?:^|[\s,])(UserId|DeviceId|Token)=("[^"]*"|[^,\s]+)`)
+	playbackRoute    = regexp.MustCompile(`(?i)^(?:/emby)?/items/([^/]+)/playbackinfo$`)
+	videoRoute       = regexp.MustCompile(`(?i)^(?:/emby)?/videos/([^/]+)/(?:stream(?:\.[^/]+)?|original(?:\.[^/]+)?)$`)
+	playerExpression = regexp.MustCompile(`mediaSource\.IsRemote\s*&&\s*"DirectPlay"\s*===\s*playMethod\s*\?\s*null\s*:\s*"anonymous"`)
+)
 
 func loadConfig() (config, error) {
 	data, err := os.ReadFile(".env")
@@ -99,17 +103,32 @@ func loadConfig() (config, error) {
 		}
 		env[key] = strings.TrimRight(env[key], "/")
 	}
-	return config{env["EMBY_HOST"], env["EMBY_API_KEY"], env["OPENLIST_ADDR"], env["OPENLIST_TOKEN"], port, time.Duration(ttl) * time.Second}, nil
+	return config{
+		emby:     env["EMBY_HOST"],
+		key:      env["EMBY_API_KEY"],
+		openlist: env["OPENLIST_ADDR"],
+		token:    env["OPENLIST_TOKEN"],
+		port:     port,
+		ttl:      time.Duration(ttl) * time.Second,
+	}, nil
 }
+
 func newGateway(c config) *gateway {
 	emby, _ := url.Parse(c.emby)
 	openlist, _ := url.Parse(c.openlist)
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DisableCompression = true
-	g := &gateway{cfg: c, emby: emby, openlist: openlist,
-		api: &http.Client{Transport: transport, Timeout: 15 * time.Second,
-			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
-		cache: make(map[cacheKey]entry)}
+	g := &gateway{
+		cfg:      c,
+		emby:     emby,
+		openlist: openlist,
+		api: &http.Client{
+			Transport:     transport,
+			Timeout:       15 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
+		cache: make(map[cacheKey]entry),
+	}
 	g.proxy = &httputil.ReverseProxy{
 		Transport: transport,
 		Rewrite: func(p *httputil.ProxyRequest) {
@@ -287,7 +306,7 @@ func (g *gateway) playbackInfo(r *http.Request, data []byte, item string) []byte
 			setQuery(q, "DeviceId", device)
 		}
 		var session string
-		json.Unmarshal(body["PlaySessionId"], &session)
+		_ = json.Unmarshal(body["PlaySessionId"], &session)
 		if session != "" {
 			setQuery(q, "PlaySessionId", session)
 		}
@@ -544,7 +563,11 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("[server] start port=%d", c.port)
-	s := &http.Server{Addr: fmt.Sprintf(":%d", c.port), Handler: newGateway(c), ReadHeaderTimeout: 10 * time.Second}
+	s := &http.Server{
+		Addr:              fmt.Sprintf(":%d", c.port),
+		Handler:           newGateway(c),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := runServer(ctx, s); err != nil {
