@@ -57,7 +57,6 @@ cp docker-compose.example.yml docker-compose.yml
 | `OPENLIST_ADDR` | OpenList HTTP(S) 地址，必须与 STRM 地址的协议、主机和端口一致，必填 | — |
 | `OPENLIST_TOKEN` | OpenList 令牌，必填 | — |
 | `PORT` | 网关监听端口，1–65535 | `18096` |
-| `CACHE_TTL` | 直链缓存秒数，正整数 | `180` |
 
 程序直接读取进程环境变量。令牌含 `$` 时，在 Compose 文件中写成 `$$`，避免变量插值。
 

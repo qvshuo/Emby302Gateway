@@ -16,7 +16,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 )
@@ -24,14 +23,6 @@ import (
 type config struct {
 	emby, key, openlist, token string
 	port                       int
-	ttl                        time.Duration
-}
-
-type cacheKey struct{ path, ua string }
-
-type entry struct {
-	url     string
-	expires time.Time
 }
 
 type gateway struct {
@@ -39,8 +30,6 @@ type gateway struct {
 	emby, openlist *url.URL
 	proxy          *httputil.ReverseProxy
 	api            *http.Client
-	mu             sync.Mutex
-	cache          map[cacheKey]entry
 }
 
 type playbackUser struct{}
@@ -55,7 +44,7 @@ var (
 
 func loadConfig() (config, error) {
 	env := map[string]string{}
-	for _, key := range []string{"EMBY_HOST", "EMBY_API_KEY", "OPENLIST_ADDR", "OPENLIST_TOKEN", "PORT", "CACHE_TTL"} {
+	for _, key := range []string{"EMBY_HOST", "EMBY_API_KEY", "OPENLIST_ADDR", "OPENLIST_TOKEN", "PORT"} {
 		if value, ok := os.LookupEnv(key); ok {
 			env[key] = value
 		}
@@ -65,27 +54,13 @@ func loadConfig() (config, error) {
 			return config{}, fmt.Errorf("missing env: %s", k)
 		}
 	}
-	positive := func(k string, fallback int) (int, error) {
-		v, ok := env[k]
-		if !ok {
-			return fallback, nil
+	port := 18096
+	if value, ok := env["PORT"]; ok {
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 1 || n > 65535 {
+			return config{}, fmt.Errorf("invalid env: PORT must be an integer from 1 to 65535")
 		}
-		n, e := strconv.Atoi(v)
-		if e != nil || n <= 0 {
-			return 0, fmt.Errorf("invalid env: %s must be a positive integer", k)
-		}
-		return n, nil
-	}
-	port, err := positive("PORT", 18096)
-	if err != nil {
-		return config{}, err
-	}
-	ttl, err := positive("CACHE_TTL", 180)
-	if err != nil {
-		return config{}, err
-	}
-	if port > 65535 || int64(ttl) > int64((1<<63-1)/time.Second) {
-		return config{}, fmt.Errorf("PORT or CACHE_TTL out of range")
+		port = n
 	}
 	for _, key := range []string{"EMBY_HOST", "OPENLIST_ADDR"} {
 		u, err := url.Parse(env[key])
@@ -100,7 +75,6 @@ func loadConfig() (config, error) {
 		openlist: env["OPENLIST_ADDR"],
 		token:    env["OPENLIST_TOKEN"],
 		port:     port,
-		ttl:      time.Duration(ttl) * time.Second,
 	}, nil
 }
 
@@ -119,7 +93,6 @@ func newGateway(c config) *gateway {
 			Timeout:       15 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		cache: make(map[cacheKey]entry),
 	}
 	g.proxy = &httputil.ReverseProxy{
 		Transport: transport,
@@ -434,19 +407,6 @@ func (g *gateway) mediaPath(r *http.Request, item string) string {
 }
 
 func (g *gateway) resolve(r *http.Request, path string) string {
-	key := cacheKey{path, r.UserAgent()}
-	now := time.Now()
-	g.mu.Lock()
-	for k, v := range g.cache {
-		if !now.Before(v.expires) {
-			delete(g.cache, k)
-		}
-	}
-	cached, ok := g.cache[key]
-	g.mu.Unlock()
-	if ok {
-		return cached.url
-	}
 	data, _ := json.Marshal(map[string]string{"path": path})
 	req, err := http.NewRequestWithContext(r.Context(), "POST", g.cfg.openlist+"/api/fs/get", bytes.NewReader(data))
 	if err != nil {
@@ -485,12 +445,6 @@ func (g *gateway) resolve(r *http.Request, path string) string {
 		log.Printf("[openlist] resolve_failed reason=url")
 		return ""
 	}
-	g.mu.Lock()
-	// Bound retained URLs even when a client requests many distinct sources or user agents.
-	if len(g.cache) < 1024 {
-		g.cache[key] = entry{u.String(), time.Now().Add(g.cfg.ttl)}
-	}
-	g.mu.Unlock()
 	return u.String()
 }
 
@@ -511,7 +465,7 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	match := videoRoute.FindStringSubmatch(r.URL.Path)
 	direct := strings.EqualFold(queryValue(r.URL.Query(), "Static"), "true") || strings.HasPrefix(strings.ToLower(r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]), "original")
 	if r.Method == "GET" && len(match) > 0 && direct && r.Header.Get("Upgrade") == "" {
-		// Authorize and classify through Emby before looking up a cached CDN URL.
+		// Authorize and classify through Emby before resolving the CDN URL.
 		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 		probe := r.Clone(ctx)
 		path := g.mediaPath(probe, match[1])
