@@ -48,7 +48,7 @@ git clone https://github.com/qvshuo/Emby302Gateway.git --depth=1 && cd Emby302Ga
 cp docker-compose.example.yml docker-compose.yml
 ```
 
-编辑 `docker-compose.yml` 中的 `environment`，填写 Emby 和 OpenList 地址及令牌。仓库只提供 Compose 示例；包含实际密钥的 `docker-compose.yml` 已被 Git 忽略，请勿提交。
+编辑 `docker-compose.yml` 中的 `environment`，填写 Emby 和 OpenList 地址及令牌。
 
 | 环境变量 | 说明 | 默认值 |
 | --- | --- | --- |
