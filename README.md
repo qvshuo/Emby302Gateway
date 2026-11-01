@@ -58,8 +58,6 @@ cp docker-compose.example.yml docker-compose.yml
 | `OPENLIST_TOKEN` | OpenList 令牌，必填 | — |
 | `PORT` | 网关监听端口，1–65535 | `18096` |
 
-程序直接读取进程环境变量。令牌含 `$` 时，在 Compose 文件中写成 `$$`，避免变量插值。
-
 OpenList 令牌位于「管理 → 设置 → 其他 → 令牌」。
 
 ## 启动：
