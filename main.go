@@ -54,19 +54,10 @@ var (
 )
 
 func loadConfig() (config, error) {
-	data, err := os.ReadFile(".env")
-	if err != nil {
-		return config{}, err
-	}
 	env := map[string]string{}
-	for _, line := range strings.Split(string(data), "\n") {
-		s := strings.TrimSpace(line)
-		if s == "" || strings.HasPrefix(s, "#") {
-			continue
-		}
-		k, v, ok := strings.Cut(s, "=")
-		if ok {
-			env[strings.TrimSpace(k)] = strings.Trim(strings.TrimSpace(v), "\"'")
+	for _, key := range []string{"EMBY_HOST", "EMBY_API_KEY", "OPENLIST_ADDR", "OPENLIST_TOKEN", "PORT", "CACHE_TTL"} {
+		if value, ok := os.LookupEnv(key); ok {
+			env[key] = value
 		}
 	}
 	for _, k := range []string{"EMBY_HOST", "EMBY_API_KEY", "OPENLIST_ADDR", "OPENLIST_TOKEN"} {
@@ -118,6 +109,7 @@ func newGateway(c config) *gateway {
 	openlist, _ := url.Parse(c.openlist)
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DisableCompression = true
+	transport.MaxIdleConnsPerHost = 16
 	g := &gateway{
 		cfg:      c,
 		emby:     emby,
@@ -142,6 +134,11 @@ func newGateway(c config) *gateway {
 			}
 		},
 		ModifyResponse: g.modifyResponse,
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
+			// Transport errors may contain URLs with caller credentials.
+			log.Printf("[server] proxy_failed reason=transport")
+			w.WriteHeader(http.StatusBadGateway)
+		},
 	}
 	return g
 }
@@ -400,7 +397,7 @@ func (g *gateway) mediaPath(r *http.Request, item string) string {
 			Policy struct{ EnableMediaPlayback bool }
 		}
 		// Seeing an item does not grant playback; Emby must authorize the caller's user policy.
-		if userID == "" || !g.embyJSON(r, "/Users/"+url.PathEscape(userID), url.Values{}, &user) || !user.Policy.EnableMediaPlayback {
+		if userID == "" || !g.embyJSON(r, "/Users/"+url.PathEscape(userID), url.Values{}, &user) || !strings.EqualFold(user.ID, userID) || !user.Policy.EnableMediaPlayback {
 			return ""
 		}
 		q.Set("UserId", user.ID)

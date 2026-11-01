@@ -5,3 +5,6 @@ COMPARISON.md
 
 gateway
 *_test.go
+
+docker-compose.yml
+compose.yml

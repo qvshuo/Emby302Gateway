@@ -45,17 +45,21 @@ git clone https://github.com/qvshuo/Emby302Gateway.git --depth=1 && cd Emby302Ga
 ## 配置：
 
 ```
-cp .env.example .env
+cp docker-compose.example.yml docker-compose.yml
 ```
 
-编辑 `.env` 文件，根据实际情况填写：
+编辑 `docker-compose.yml` 中的 `environment`，填写 Emby 和 OpenList 地址及令牌。仓库只提供 Compose 示例；包含实际密钥的 `docker-compose.yml` 已被 Git 忽略，请勿提交。
 
-```
-EMBY_HOST=http://localhost:8096
-EMBY_API_KEY=your_emby_api_key
-OPENLIST_ADDR=http://localhost:5244
-OPENLIST_TOKEN=your_openlist_token
-```
+| 环境变量 | 说明 | 默认值 |
+| --- | --- | --- |
+| `EMBY_HOST` | Emby HTTP(S) 地址，必填 | — |
+| `EMBY_API_KEY` | Emby API 密钥，必填 | — |
+| `OPENLIST_ADDR` | OpenList HTTP(S) 地址，必须与 STRM 地址的协议、主机和端口一致，必填 | — |
+| `OPENLIST_TOKEN` | OpenList 令牌，必填 | — |
+| `PORT` | 网关监听端口，1–65535 | `18096` |
+| `CACHE_TTL` | 直链缓存秒数，正整数 | `180` |
+
+程序直接读取进程环境变量，不再读取或挂载 `.env`。从旧版本迁移时，将原 `.env` 的值填入 Compose 的 `environment`，并移除旧 `compose.yml`，避免 Compose 优先使用旧配置。令牌含 `$` 时，在 Compose 文件中写成 `$$`，避免变量插值。
 
 OpenList 令牌位于「管理 → 设置 → 其他 → 令牌」。
 
