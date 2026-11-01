@@ -59,7 +59,7 @@ cp docker-compose.example.yml docker-compose.yml
 | `PORT` | 网关监听端口，1–65535 | `18096` |
 | `CACHE_TTL` | 直链缓存秒数，正整数 | `180` |
 
-程序直接读取进程环境变量，不再读取或挂载 `.env`。从旧版本迁移时，将原 `.env` 的值填入 Compose 的 `environment`，并移除旧 `compose.yml`，避免 Compose 优先使用旧配置。令牌含 `$` 时，在 Compose 文件中写成 `$$`，避免变量插值。
+程序直接读取进程环境变量。令牌含 `$` 时，在 Compose 文件中写成 `$$`，避免变量插值。
 
 OpenList 令牌位于「管理 → 设置 → 其他 → 令牌」。
 
